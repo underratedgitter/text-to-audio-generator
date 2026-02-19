@@ -1,0 +1,14 @@
+# Text-to-Audio Configuration
+
+tts:
+  engine: "edge-tts"  # edge-tts or gtts
+  voice: "en-US-JennyNeural"
+  speaking_rate: 1.0
+  pitch: 0
+
+logging:
+  level: "INFO"
+  log_file: "logs/pipeline.log"
+
+output:
+  base_directory: "output"
