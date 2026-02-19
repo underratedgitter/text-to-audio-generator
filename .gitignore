@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables
+.env
+
+# API Credentials
+config/youtube_credentials.json
+config/youtube_token.json
+config/*.json
+
+# Output files
+output/
+!output/.gitkeep
+logs/
+!logs/.gitkeep
+
+# Data cache
+data/
+!data/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large media files
+*.mp4
+*.mp3
+*.wav
+*.avi
+*.mov
+assets/music/*.mp3
+assets/videos/*.mp4
+
+# Temporary files
+tmp/
+temp/
+*.tmp
