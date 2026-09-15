@@ -2,7 +2,10 @@
 
 from pathlib import Path
 import os
+import queue
+import subprocess
 import sys
+import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
@@ -58,7 +61,8 @@ class AudioDashboard:
         buttons_row.pack(fill="x", pady=(0, 8))
 
         tk.Button(buttons_row, text="Load .txt File", command=self.load_text_file).pack(side="left")
-        tk.Button(buttons_row, text="Generate Voiceover", command=self.generate_voiceover).pack(side="left", padx=(8, 0))
+        self.generate_button = tk.Button(buttons_row, text="Generate Voiceover", command=self.generate_voiceover)
+        self.generate_button.pack(side="left", padx=(8, 0))
         tk.Button(buttons_row, text="Open Output Folder", command=self.open_output_folder).pack(side="left", padx=(8, 0))
 
         self.status_var = tk.StringVar(value="Ready")
@@ -94,35 +98,65 @@ class AudioDashboard:
 
         output_id = self.output_id_var.get().strip() or None
         self.status_var.set("Generating voiceover...")
-        self.root.update_idletasks()
+        self.generate_button.config(state="disabled")
 
-        try:
-            video_dir = self.file_manager.create_video_directory(output_id)
-            script_data = {
-                "full_script": text,
-                "word_count": len(text.split()),
-            }
-            result = self.generator.generate_voiceover(script_data, video_dir)
-            self.last_audio_path = Path(result["audio_file"])
+        # TTS is a network round trip; running it on the Tk thread froze the
+        # window ("Not Responding") until it finished. Work in the background and
+        # let the UI thread poll for the outcome — Tk must only be touched there.
+        outcome = queue.Queue(maxsize=1)
 
-            self.status_var.set(
-                f"Done. Duration: {result['duration_seconds']:.1f}s | File: {self.last_audio_path}"
-            )
-            messagebox.showinfo(
-                "Success",
-                f"Voiceover generated successfully.\n\nFile:\n{self.last_audio_path}",
-            )
-        except Exception as exc:
-            self.status_var.set("Generation failed")
-            messagebox.showerror("Generation failed", str(exc))
+        def work():
+            try:
+                video_dir = self.file_manager.create_video_directory(output_id)
+                script_data = {
+                    "full_script": text,
+                    "word_count": len(text.split()),
+                }
+                outcome.put((True, self.generator.generate_voiceover(script_data, video_dir)))
+            except Exception as exc:
+                outcome.put((False, str(exc)))
+
+        def poll():
+            try:
+                ok, value = outcome.get_nowait()
+            except queue.Empty:
+                self.root.after(100, poll)
+                return
+            if ok:
+                self._on_generated(value)
+            else:
+                self._on_failed(value)
+
+        threading.Thread(target=work, daemon=True).start()
+        self.root.after(100, poll)
+
+    def _on_generated(self, result):
+        self.generate_button.config(state="normal")
+        self.last_audio_path = Path(result["audio_file"])
+        self.status_var.set(
+            f"Done. Duration: {result['duration_seconds']:.1f}s | File: {self.last_audio_path}"
+        )
+        messagebox.showinfo(
+            "Success",
+            f"Voiceover generated successfully.\n\nFile:\n{self.last_audio_path}",
+        )
+
+    def _on_failed(self, message):
+        self.generate_button.config(state="normal")
+        self.status_var.set("Generation failed")
+        messagebox.showerror("Generation failed", message)
 
     def open_output_folder(self):
-        target = self.last_audio_path.parent if self.last_audio_path else (Path.cwd() / "output")
+        # Output lives under the project root (FileManager), not the current directory.
+        target = self.last_audio_path.parent if self.last_audio_path else self.file_manager.base_output_dir
         try:
+            target.mkdir(parents=True, exist_ok=True)
             if os.name == "nt":
                 os.startfile(str(target))
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(target)])
             else:
-                messagebox.showinfo("Output folder", f"Output folder:\n{target}")
+                subprocess.Popen(["xdg-open", str(target)])
         except Exception as exc:
             messagebox.showerror("Error", f"Could not open folder:\n{exc}")
 

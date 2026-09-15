@@ -67,12 +67,14 @@ class Logger:
         """Setup logger with file and console handlers"""
         logger = logging.getLogger(name)
         
-        # Prevent duplicate handlers
-        if logger.hasHandlers():
+        # Prevent duplicate handlers. hasHandlers() also looks at ancestors, so once
+        # anything configured the root logger this returned an unconfigured logger
+        # and INFO messages were silently dropped.
+        if logger.handlers:
             return logger
         
         # Get logging configuration
-        log_level = config.get('logging.level', 'INFO')
+        log_level = str(config.get('logging.level', 'INFO')).upper()
         log_file = config.get('logging.log_file', 'logs/pipeline.log')
         
         # Create logs directory if it doesn't exist
@@ -80,7 +82,7 @@ class Logger:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Set logging level
-        logger.setLevel(getattr(logging, log_level))
+        logger.setLevel(getattr(logging, log_level, logging.INFO))
         
         # Console handler with color support
         console_handler = logging.StreamHandler()
@@ -103,6 +105,8 @@ class Logger:
         # Add handlers
         logger.addHandler(console_handler)
         logger.addHandler(file_handler)
+        # This logger prints for itself; propagating to a configured root would print each line twice.
+        logger.propagate = False
         
         return logger
 
@@ -122,7 +126,12 @@ class FileManager:
         """
         if video_id is None:
             video_id = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
+
+        # The id becomes one folder under output/. An absolute path or "../"
+        # would otherwise write the MP3 anywhere on disk.
+        if Path(video_id).name != video_id or video_id in ('.', '..'):
+            raise ValueError(f"Output folder must be a plain folder name, got: {video_id!r}")
+
         video_dir = self.base_output_dir / video_id
         video_dir.mkdir(parents=True, exist_ok=True)
         

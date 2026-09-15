@@ -52,12 +52,16 @@ class VoiceoverGenerator:
         # Generate audio file
         output_path = video_dir / 'voiceover.mp3'
         
+        if not clean_text:
+            raise ValueError("Nothing to speak: the text is empty once scene markers are removed")
+
         if self.engine == 'edge-tts':
-            duration = self._generate_edge_tts(clean_text, output_path)
+            self._generate_edge_tts(clean_text, output_path)
         elif self.engine == 'gtts':
-            duration = self._generate_gtts(clean_text, output_path)
+            self._generate_gtts(clean_text, output_path)
         else:
             raise ValueError(f"Unsupported TTS engine: {self.engine}")
+        duration = self._get_audio_duration(output_path, clean_text)
         
         # Create voiceover data
         voiceover_data = {
@@ -101,11 +105,6 @@ class VoiceoverGenerator:
         
         # Run async TTS generation
         asyncio.run(self._async_edge_tts(text, output_path))
-        
-        # Get audio duration
-        duration = self._get_audio_duration(output_path)
-        
-        return duration
     
     async def _async_edge_tts(self, text: str, output_path: Path):
         """Async method for Edge-TTS"""
@@ -132,32 +131,32 @@ class VoiceoverGenerator:
             
             # Save to file
             tts.save(str(output_path))
-            
-            # Get duration
-            duration = self._get_audio_duration(output_path)
-            
-            return duration
         
         except Exception as e:
             self.logger.error(f"Error generating gTTS voiceover: {e}")
             raise
     
-    def _get_audio_duration(self, audio_path: Path) -> float:
+    def _get_audio_duration(self, audio_path: Path, text: str = "") -> float:
         """Get duration of audio file in seconds"""
         try:
             from pydub import AudioSegment
             audio = AudioSegment.from_mp3(str(audio_path))
             return len(audio) / 1000.0  # Convert ms to seconds
         except ImportError:
-            # Fallback: estimate from script
-            self.logger.warning("pydub not installed, using estimated duration")
-            # Rough estimate: 150 words per minute
-            with open(audio_path, 'rb'):
-                # Assume 2.5 words per second average
-                return 180.0  # Default estimate
+            # pydub is optional, and on Python 3.13+ it fails to import (audioop was removed).
+            self.logger.warning("pydub unavailable, using estimated duration")
         except Exception as e:
             self.logger.warning(f"Could not determine audio duration: {e}")
-            return 180.0  # Default estimate
+        return self._estimate_duration(text)
+
+    def _estimate_duration(self, text: str) -> float:
+        """Estimate spoken length at ~150 words per minute, scaled by speaking rate.
+
+        The previous fallback returned a flat 180 seconds for every input.
+        """
+        words = len(text.split())
+        rate = self.speaking_rate if self.speaking_rate and self.speaking_rate > 0 else 1.0
+        return round(words / 2.5 / rate, 1)
     
     def _format_rate(self, speaking_rate: float) -> str:
         """Format speaking rate for Edge-TTS"""
@@ -165,7 +164,8 @@ class VoiceoverGenerator:
         if speaking_rate == 1.0:
             return "+0%"
         
-        percentage = int((speaking_rate - 1.0) * 100)
+        # round, not int: 0.9 is -9.999... in floating point and int() made it -9%.
+        percentage = round((speaking_rate - 1.0) * 100)
         return f"{percentage:+d}%"
     
     def _format_pitch(self, pitch: int) -> str:
