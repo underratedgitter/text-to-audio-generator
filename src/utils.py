@@ -26,7 +26,7 @@ else:
 class Config:
     """Configuration manager - loads and provides access to config.yaml"""
     
-    def __init__(self, config_path: str = "config/config.yaml"):
+    def __init__(self, config_path: str = "config/config.yaml") -> None:
         self.config_path = resolve_project_path(config_path)
         self.config = self._load_config()
         
@@ -114,7 +114,7 @@ class Logger:
 class FileManager:
     """Handles file operations and output directory management"""
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config) -> None:
         self.config = config
         base_dir = config.get('output.base_directory', 'output')
         self.base_output_dir = resolve_project_path(base_dir)
@@ -140,7 +140,7 @@ class FileManager:
         
         return video_dir
     
-    def save_json(self, data: Dict[Any, Any], filepath: Path):
+    def save_json(self, data: Dict[Any, Any], filepath: Path) -> None:
         """Save dictionary as JSON file"""
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -164,7 +164,7 @@ class FileManager:
 class SafetyChecker:
     """Ensures content compliance and originality"""
     
-    def __init__(self, config: Config, logger: logging.Logger):
+    def __init__(self, config: Config, logger: logging.Logger) -> None:
         self.config = config
         self.logger = logger
         self.blacklist = config.get('safety.blacklist_keywords', [])
@@ -240,7 +240,7 @@ class SafetyChecker:
 class ProgressTracker:
     """Track pipeline execution progress"""
     
-    def __init__(self, video_dir: Path):
+    def __init__(self, video_dir: Path) -> None:
         self.video_dir = video_dir
         self.progress_file = video_dir / 'progress.json'
         self.progress = self._load_progress()
@@ -257,7 +257,7 @@ class ProgressTracker:
             'errors': []
         }
     
-    def mark_stage_complete(self, stage_name: str):
+    def mark_stage_complete(self, stage_name: str) -> None:
         """Mark a pipeline stage as complete"""
         if stage_name not in self.progress['stages_completed']:
             self.progress['stages_completed'].append(stage_name)
@@ -265,7 +265,7 @@ class ProgressTracker:
         self.progress['last_updated'] = datetime.now().isoformat()
         self._save_progress()
     
-    def add_error(self, stage_name: str, error_message: str):
+    def add_error(self, stage_name: str, error_message: str) -> None:
         """Log an error for a stage"""
         self.progress['errors'].append({
             'stage': stage_name,
@@ -274,7 +274,7 @@ class ProgressTracker:
         })
         self._save_progress()
     
-    def _save_progress(self):
+    def _save_progress(self) -> None:
         """Save progress to file"""
         with open(self.progress_file, 'w', encoding='utf-8') as f:
             json.dump(self.progress, f, indent=2)
