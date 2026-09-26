@@ -5,9 +5,9 @@ Supports: edge-tts (recommended), gTTS (backup)
 """
 
 import asyncio
+import re
 from pathlib import Path
-from typing import Dict, Any, Optional
-import json
+from typing import Any, Dict, List
 
 try:
     import edge_tts
@@ -84,8 +84,6 @@ class VoiceoverGenerator:
     
     def _clean_text_for_tts(self, text: str) -> str:
         """Remove scene markers and format text for TTS"""
-        import re
-        
         # Remove [SCENE: ...] markers
         text = re.sub(r'\[SCENE:[^\]]+\]', '', text)
         
@@ -95,11 +93,8 @@ class VoiceoverGenerator:
         
         return text
     
-    def _generate_edge_tts(self, text: str, output_path: Path) -> float:
-        """
-        Generate voiceover using Edge-TTS (FREE, high quality)
-        Returns: Duration in seconds
-        """
+    def _generate_edge_tts(self, text: str, output_path: Path) -> None:
+        """Generate voiceover using Edge-TTS (FREE, high quality)."""
         if edge_tts is None:
             raise ImportError("edge-tts not installed. Install with: pip install edge-tts")
         
@@ -116,11 +111,10 @@ class VoiceoverGenerator:
         communicate = edge_tts.Communicate(text, self.voice, rate=rate, pitch=pitch_str)
         await communicate.save(str(output_path))
     
-    def _generate_gtts(self, text: str, output_path: Path) -> float:
+    def _generate_gtts(self, text: str, output_path: Path) -> None:
         """
         Generate voiceover using gTTS (FREE, basic quality)
         Fallback option if Edge-TTS fails
-        Returns: Duration in seconds
         """
         if gTTS is None:
             raise ImportError("gtts not installed. Install with: pip install gtts")
@@ -175,13 +169,13 @@ class VoiceoverGenerator:
             return "+0Hz"
         return f"{pitch:+d}Hz"
     
-    def list_available_voices(self):
+    def list_available_voices(self) -> List[Dict[str, Any]]:
         """List all available voices for Edge-TTS"""
         if edge_tts is None:
             self.logger.error("edge-tts not installed")
             return []
-        
-        async def get_voices():
+
+        async def get_voices() -> List[Dict[str, Any]]:
             voices = await edge_tts.list_voices()
             return voices
         

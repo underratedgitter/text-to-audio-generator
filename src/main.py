@@ -6,6 +6,7 @@ Generate a voiceover MP3 from text input.
 import argparse
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -23,7 +24,7 @@ class AudioPipeline:
         self.file_manager = FileManager(self.config)
         self.voiceover_generator = VoiceoverGenerator(self.config)
 
-    def generate_audio(self, text: str, output_id: str = None) -> dict:
+    def generate_audio(self, text: str, output_id: Optional[str] = None) -> dict:
         """Generate audio file from raw text input."""
         if not text or not text.strip():
             raise ValueError("Input text is empty")
