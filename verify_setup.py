@@ -1,7 +1,6 @@
 """Setup verification script for the audio-only pipeline."""
 
 import sys
-import yaml
 from pathlib import Path
 
 # Color codes for console output
