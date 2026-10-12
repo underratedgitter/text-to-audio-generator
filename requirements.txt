@@ -8,3 +8,5 @@ gtts>=2.5.0
 
 # Optional (accurate duration detection)
 pydub>=0.25.1
+# pydub imports audioop, which Python 3.13 removed from the standard library.
+audioop-lts>=0.2.1; python_version >= "3.13"

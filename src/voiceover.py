@@ -137,7 +137,7 @@ class VoiceoverGenerator:
             audio = AudioSegment.from_mp3(str(audio_path))
             return len(audio) / 1000.0  # Convert ms to seconds
         except ImportError:
-            # pydub is optional, and on Python 3.13+ it fails to import (audioop was removed).
+            # pydub is optional; on Python 3.13+ it also needs audioop-lts (see requirements.txt).
             self.logger.warning("pydub unavailable, using estimated duration")
         except Exception as e:
             self.logger.warning(f"Could not determine audio duration: {e}")

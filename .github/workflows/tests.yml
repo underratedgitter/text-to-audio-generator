@@ -1,0 +1,41 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install
+        run: pip install -r requirements.txt pytest ruff
+
+      # Pyflakes catches names that only fail at runtime.
+      - name: Lint
+        run: ruff check . --select F
+
+      # The suite covers text cleanup, config and file handling; it never
+      # calls a TTS service, so no network access is needed.
+      - name: Run tests
+        run: pytest tests -q
