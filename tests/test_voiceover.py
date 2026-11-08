@@ -1,6 +1,11 @@
 import pytest
 
+import shutil
+import sys
+import types
+
 from utils import Config
+import voiceover as voiceover_module
 from voiceover import VoiceoverGenerator
 
 
@@ -91,3 +96,179 @@ def test_generate_voiceover_rejects_empty_script(generator, tmp_path):
 
     with pytest.raises(ValueError):
         generator.generate_voiceover(script_data, tmp_path)
+
+
+def test_generate_voiceover_removes_empty_file_after_failure(generator, tmp_path, monkeypatch):
+    output_path = tmp_path / "voiceover.mp3"
+
+    def fail_after_writing_empty_file(text, path):
+        # TTS engines create the target file before streaming audio, so a
+        # failure mid-stream can leave an empty file behind.
+        path.write_bytes(b"")
+        raise RuntimeError("TTS service unavailable")
+
+    def fail_also(text, path):
+        raise RuntimeError("gTTS unavailable")
+
+    monkeypatch.setattr(generator, "_generate_edge_tts", fail_after_writing_empty_file)
+    monkeypatch.setattr(generator, "_generate_gtts", fail_also)
+    monkeypatch.setattr(
+        generator, "_generate_offline_tts", fail_also
+    )
+
+    with pytest.raises(RuntimeError):
+        generator.generate_voiceover({"full_script": "Hello world."}, tmp_path)
+
+    assert not output_path.exists()
+
+
+def test_generate_voiceover_rejects_engine_producing_empty_file(generator, tmp_path, monkeypatch):
+    output_path = tmp_path / "voiceover.mp3"
+
+    def produce_empty_file(text, path):
+        path.write_bytes(b"")
+
+    def fallback_also_fails(text, path):
+        raise RuntimeError("fallback also failed")
+
+    monkeypatch.setattr(generator, "_generate_edge_tts", produce_empty_file)
+    monkeypatch.setattr(generator, "_generate_gtts", fallback_also_fails)
+    monkeypatch.setattr(generator, "_generate_offline_tts", fallback_also_fails)
+
+    with pytest.raises(RuntimeError):
+        generator.generate_voiceover({"full_script": "Hello world."}, tmp_path)
+
+    assert not output_path.exists()
+
+
+def test_generate_voiceover_falls_back_to_gtts_when_edge_tts_fails(
+    generator, tmp_path, monkeypatch
+):
+    output_path = tmp_path / "voiceover.mp3"
+
+    def failing_edge_tts(text, path):
+        path.write_bytes(b"")
+        raise RuntimeError("edge-tts 403")
+
+    def working_gtts(text, path):
+        path.write_bytes(b"fake mp3 bytes")
+
+    monkeypatch.setattr(generator, "_generate_edge_tts", failing_edge_tts)
+    monkeypatch.setattr(generator, "_generate_gtts", working_gtts)
+
+    result = generator.generate_voiceover({"full_script": "Hello world."}, tmp_path)
+
+    assert result["engine"] == "gtts"
+    assert output_path.exists()
+    assert output_path.read_bytes() == b"fake mp3 bytes"
+
+
+def test_generate_voiceover_falls_back_offline_when_all_online_engines_fail(
+    generator, tmp_path, monkeypatch
+):
+    output_path = tmp_path / "voiceover.mp3"
+
+    def failing_writer(text, path):
+        path.write_bytes(b"")
+        raise RuntimeError("engine unreachable")
+
+    def working_offline(text, path):
+        path.write_bytes(b"offline mp3 bytes")
+
+    monkeypatch.setattr(generator, "_generate_edge_tts", failing_writer)
+    monkeypatch.setattr(generator, "_generate_gtts", failing_writer)
+    monkeypatch.setattr(generator, "_generate_offline_tts", working_offline)
+
+    result = generator.generate_voiceover({"full_script": "Hello world."}, tmp_path)
+
+    assert result["engine"] == "offline"
+    assert output_path.exists()
+    assert output_path.read_bytes() == b"offline mp3 bytes"
+
+
+def test_generate_voiceover_all_engines_fail_raises_last_error(
+    generator, tmp_path, monkeypatch
+):
+    output_path = tmp_path / "voiceover.mp3"
+
+    def failing_writer(text, path):
+        path.write_bytes(b"")
+        raise RuntimeError("engine down")
+
+    monkeypatch.setattr(generator, "_generate_edge_tts", failing_writer)
+    monkeypatch.setattr(generator, "_generate_gtts", failing_writer)
+    monkeypatch.setattr(generator, "_generate_offline_tts", failing_writer)
+
+    with pytest.raises(RuntimeError):
+        generator.generate_voiceover({"full_script": "Hello world."}, tmp_path)
+
+    assert not output_path.exists()
+
+
+def test_generate_offline_tts_renders_and_converts(generator, tmp_path, monkeypatch):
+    output_path = tmp_path / "voiceover.mp3"
+
+    class FakePyttsxEngine:
+        def setProperty(self, key, value):
+            assert key == "rate"
+
+        def runAndWait(self):
+            pass
+
+        def stop(self):
+            pass
+
+    # Simulate a macOS backend that appends .aiff to the requested name
+    def fake_init():
+        engine = FakePyttsxEngine()
+
+        def save_to_file(text, path):
+            with open(str(path) + ".aiff", "wb") as fh:
+                fh.write(b"fake aiff bytes")
+
+        engine.save_to_file = save_to_file
+        return engine
+
+    fake_pyttsx3 = types.SimpleNamespace(init=fake_init)
+
+    def fake_run(command, check=None, capture_output=None, text=None):
+        # ffmpeg invoked as: ffmpeg -y -i <render> -codec:a libmp3lame <out>
+        out_path = command[-1]
+        assert out_path.endswith("voiceover.mp3")
+        with open(out_path, "wb") as fh:
+            fh.write(b"fake mp3 bytes")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(voiceover_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(voiceover_module, "pyttsx3", fake_pyttsx3)
+    monkeypatch.setattr(shutil, "which", lambda name: "/fake/ffmpeg" if name == "ffmpeg" else None)
+
+    generator._generate_offline_tts("Hello offline.", output_path)
+
+    assert output_path.read_bytes() == b"fake mp3 bytes"
+
+
+def test_generate_offline_tts_raises_when_backend_writes_nothing(
+    generator, tmp_path, monkeypatch
+):
+    output_path = tmp_path / "voiceover.mp3"
+
+    class FakePyttsxEngine:
+        def setProperty(self, key, value):
+            pass
+
+        def save_to_file(self, text, path):
+            pass  # write nothing — broken backend
+
+        def runAndWait(self):
+            pass
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(
+        voiceover_module, "pyttsx3", types.SimpleNamespace(init=lambda: FakePyttsxEngine())
+    )
+
+    with pytest.raises(RuntimeError):
+        generator._generate_offline_tts("Hello offline.", output_path)

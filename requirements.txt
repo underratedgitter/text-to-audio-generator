@@ -3,8 +3,10 @@ pyyaml>=6.0
 python-dotenv>=1.0.0
 
 # Text-to-Speech
-edge-tts>=6.1.9
+edge-tts>=7.3.1
 gtts>=2.5.0
+# Offline last-resort engine (needs ffmpeg on PATH for MP3 conversion)
+pyttsx3>=2.90
 
 # Optional (accurate duration detection)
 pydub>=0.25.1
