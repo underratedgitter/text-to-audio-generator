@@ -1,7 +1,6 @@
 import pytest
 
 import shutil
-import sys
 import types
 
 from utils import Config
