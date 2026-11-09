@@ -1,14 +1,14 @@
 # Core
-pyyaml>=6.0
-python-dotenv>=1.0.0
+pyyaml>=6.0.3
+python-dotenv>=1.2.4
 
 # Text-to-Speech
 edge-tts>=7.3.1
-gtts>=2.5.0
+gtts>=2.5.4
 # Offline last-resort engine (needs ffmpeg on PATH for MP3 conversion)
-pyttsx3>=2.90
+pyttsx3>=2.99
 
 # Optional (accurate duration detection)
 pydub>=0.25.1
 # pydub imports audioop, which Python 3.13 removed from the standard library.
-audioop-lts>=0.2.1; python_version >= "3.13"
+audioop-lts>=0.2.2; python_version >= "3.13"
